@@ -12,7 +12,7 @@ class Dataset(Dataset):
 
         self.images = torch.from_numpy(data['images']) # [106, 100, 100, 3]
         self.poses = torch.from_numpy(data['poses']) # [106, 4, 4]
-        self.focal = torch.from_numpy(data['focal'], dtype=torch.float32)
+        self.focal = torch.tensor(data['focal'], dtype=torch.float32)
 
         self.len = self.images.shape[0]
 

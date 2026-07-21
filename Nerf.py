@@ -117,10 +117,12 @@ def get_rays(
             rays_d (torch.Tensor): 각 레이의 방향 벡터 (World Coordinate Direction) 
                 Shape: [H, W, 3]
     """
+    device = c2w.device
+
     i, j = torch.meshgrid(
-        torch.arange(W, dtype=torch.float32), 
-        torch.arange(H, dtype=torch.float32), 
-        indexing='xy')
+        torch.arange(W, dtype=torch.float32, device=device), 
+        torch.arange(H, dtype=torch.float32, device=device), 
+        indexing='xy',)
     
     dirs = torch.stack([
         (i - W * .5) / focal, 
@@ -190,8 +192,8 @@ def render_rays(
     raw = raw.reshape(pts.shape[:-1] + (4, ))
 
     # Compute opacities and colors
-    sigma_a = torch.ReLU(raw[..., 3])
-    rgb = torch.Sigmoid(raw[..., 3])
+    sigma_a = torch.relu(raw[..., 3])
+    rgb = torch.sigmoid(raw[..., :3])
 
     # Do Volume rendering
     dists = torch.cat([z_vals[..., 1:] - z_vals[..., :-1], torch.full_like(z_vals[..., :1], 1e10)], dim=-1)

@@ -5,6 +5,7 @@ __pycache__/
 
 .vscode/
 *.npz
+logs/
 
 # C extensions
 *.so
