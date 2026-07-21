@@ -2,7 +2,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 import numpy as np
-from typing import Tuple
+from typing import Tuple, Callable
 
 class NeRF(nn.Module):
     """
@@ -132,3 +132,80 @@ def get_rays(
     rays_o = c2w[:3, -1].expand(rays_d.shape)
 
     return rays_o, rays_d
+
+def render_rays(
+        network_fn: Callable[[torch.Tensor], torch.Tensor],
+        rays_o: torch.Tensor,
+        rays_d: torch.Tensor,
+        near: float,
+        far: float,
+        N_samples: int,
+        rand: bool = False
+    ) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
+    """
+        ray에 sampling을 적용한 뒤 각 sample의 rgb, depth, acc를 연산하는 함수
+
+        Args:
+            network_fn (Callable): NeRF 모델
+            rays_o (torch.Tensor): 각 레이의 시작점
+                Shape: [H, W, 3]
+            rays_d (torch.Tensor): 각 레이의 방향 벡터
+                Shape: [H, W, 3]
+            near (float) : 가장 가까운 거리
+            far (float) : 가장 먼 거리
+            N_samples (int) : 샘플의 개수
+            rand (bool) : 샘플링 좌표에 노이즈를 추가하는지 여부
+
+        Returns:
+            rgb_map (torch.Tensor): 색상 지도
+                Shape: [H, W, 3]
+            depth_map (torch.Tensor): 깊이 지도
+                Shape: [H, W] 
+            acc_map (torch.Tensor): 누적 불투명도 지도
+                Shape: [H, W] 
+    """
+    def batchify(
+            fn: Callable[[torch.Tensor], torch.Tensor],
+            chunk: int = 1024 * 32 # 한번에 GPU에 넣을 샘플 수
+        ):
+        def ret(inputs:torch.Tensor) -> torch.Tensor:
+            outputs = []
+            for i in range(0, inputs.shape[0], chunk):
+                outputs.append(fn(inputs[i:i+chunk]))
+            outputs = torch.cat(outputs, dim=0)
+            return outputs  
+        return ret
+    
+    z_vals = torch.linspace(near, far, N_samples, device=rays_o.device)
+    if rand:
+        noise = torch.rand(rays_o.shape[:-1] + (N_samples, ), device=rays_o.device)
+        z_vals = z_vals + noise * (far - near) / N_samples
+
+    pts = rays_o[..., None, :] + rays_d[..., None, :] * z_vals[..., :, None]
+
+    # Run network
+    pts_flat = pts.reshape(-1, 3)
+    pts_flat = positional_encoding(pts_flat)
+    raw = batchify(network_fn)(pts_flat)
+    raw = raw.reshape(pts.shape[:-1] + (4, ))
+
+    # Compute opacities and colors
+    sigma_a = torch.ReLU(raw[..., 3])
+    rgb = torch.Sigmoid(raw[..., 3])
+
+    # Do Volume rendering
+    dists = torch.cat([z_vals[..., 1:] - z_vals[..., :-1], torch.full_like(z_vals[..., :1], 1e10)], dim=-1)
+    alpha = 1. - torch.exp(-sigma_a * dists)
+    
+    transmittance_terms = 1. - alpha + 1e-10
+    padding = torch.cat([
+        torch.ones_like(transmittance_terms[..., :1]),
+        transmittance_terms[..., :-1]
+    ], dim=-1)
+    weights = alpha * torch.cumprod(padding, dim=-1)
+
+    rgb_map = torch.sum(weights[..., None] * rgb, dim=-2)
+    depth_map = torch.sum(weights * z_vals, dim=-1)
+    acc_map = torch.sum(weights, dim=-1)
+
+    return rgb_map, depth_map, acc_map
