@@ -2,6 +2,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 import numpy as np
+from typing import Tuple
 
 class NeRF(nn.Module):
     """
@@ -93,3 +94,41 @@ def positional_encoding(
 
     rets = torch.cat(rets, dim=-1)
     return rets
+
+def get_rays(
+        H:int,
+        W:int,
+        focal:float,
+        c2w:torch.Tensor
+    ) -> Tuple[torch.Tensor, torch.Tensor]:
+    """
+        카메라의 내부 데이터와 외부 데이터를 받아 각 픽셀을 관통하는 레이의 원점과 방향을 계산하는 함수
+
+        Args:
+            H (int): 이미지 높이 (Height)
+            W (int): 이미지 너비 (Width)
+            focal (float): 초점 거리 (Focal Length)
+            c2w (torch.Tensor): Camera-to-World 변환 행렬 
+                Shape: [4, 4] 또는 [3, 4]
+
+        Returns:
+            rays_o (torch.Tensor): 각 레이의 시작점 (World Coordinate Origin) 
+                Shape: [H, W, 3]
+            rays_d (torch.Tensor): 각 레이의 방향 벡터 (World Coordinate Direction) 
+                Shape: [H, W, 3]
+    """
+    i, j = torch.meshgrid(
+        torch.arange(W, dtype=torch.float32), 
+        torch.arange(H, dtype=torch.float32), 
+        indexing='xy')
+    
+    dirs = torch.stack([
+        (i - W * .5) / focal, 
+        -(j - H * .5) / focal, 
+        -torch.ones_like(i)
+        ], dim=-1)
+
+    rays_d = torch.matmul(dirs, c2w[:3, :3].T)
+    rays_o = c2w[:3, -1].expand(rays_d.shape)
+
+    return rays_o, rays_d
