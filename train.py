@@ -21,7 +21,8 @@ os.makedirs('logs', exist_ok=True)
 psnrs = []
 iternums = []
 
-nerf_dataset = Dataset(r'data\tiny_nerf_data.npz')
+# nerf_dataset = Dataset(r'data\tiny_nerf_data.npz')
+nerf_dataset = Dataset(r'/content/drive/MyDrive/Lightweight_nerf/data/tiny_nerf_data.npz')
 testimg, testpose = nerf_dataset[101]['image'].to(device), nerf_dataset[101]['pose'].to(device)
 
 model = NeRF().to(device=device)
@@ -63,7 +64,7 @@ for i in range(N_iters + 1):
             rays_o, rays_d = get_rays(H, W, focal, testpose)
             rgb, depth, acc = render_rays(model, rays_o, rays_d, near=2., far=6., N_samples=N_samples)
             loss = F.mse_loss(rgb, testimg)
-            psnr = -10. * torch.math.log(loss) / torch.math.log(10.)
+            psnr = -10. * torch.log10(loss)
 
             psnrs.append(psnr)
             iternums.append(i)

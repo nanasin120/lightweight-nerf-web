@@ -27,18 +27,18 @@ class NeRF(nn.Module):
 
         input_dim = 3 + 3 * 2 * L_embed
 
-        self.input = nn.Linear(in_features=input_dim, out_features=W, bias=False)
+        self.input = nn.Linear(in_features=input_dim, out_features=W, bias=True)
 
         self.dense = nn.ModuleList()
         for i in range(D-1):
             idx = i + 1 # input이 있을 경우의 idx
 
             if idx % 5 == 0:
-                self.dense.append(nn.Linear(in_features=W + input_dim, out_features=W, bias=False))
+                self.dense.append(nn.Linear(in_features=W + input_dim, out_features=W, bias=True))
             else:
-                self.dense.append(nn.Linear(in_features=W, out_features=W, bias=False))
+                self.dense.append(nn.Linear(in_features=W, out_features=W, bias=True))
             
-        self.output = nn.Linear(in_features=W, out_features=4, bias=False)
+        self.output = nn.Linear(in_features=W, out_features=4, bias=True)
         self.relu = nn.ReLU(inplace=False)
 
     def forward(self, 
